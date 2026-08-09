@@ -39,7 +39,7 @@ if uploaded_file is not None:
         if not api_key:
             st.error("⚠️ Por favor introduce tu API Key de Tripo en la barra lateral izquierda.")
         else:
-            with st.spinner("⏳ Conectando con la API de Tripo para esculpir el modelo 3D..."):
+            with st.spinner("⏳ Conectando con la API v3 de Tripo para esculpir el modelo 3D..."):
                 try:
                     headers = {
                         "Authorization": f"Bearer {api_key}",
@@ -47,27 +47,40 @@ if uploaded_file is not None:
                     }
                     
                     encoded_image = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
-                    
+                    ext = uploaded_file.name.split('.')[-1].lower()
+                    if ext == 'jpg':
+                        ext = 'jpeg'
+                        
+                    # Estructura oficial v3 para Image-to-Model
                     payload = {
-                        "type": "image_to_model",
                         "file": {
-                            "type": "jpg",
+                            "type": ext,
                             "data": encoded_image
-                        }
+                        },
+                        "texture": True,
+                        "pbr": True
                     }
                     
-                    # Endpoint corregido para la API v3 de Tripo
-                    task_res = requests.post("https://openapi.tripo3d.ai/v3/openapi/task", headers=headers, json=payload)
+                    # Endpoint oficial correcto de Tripo v3
+                    task_res = requests.post(
+                        "https://openapi.tripo3d.ai/v3/generation/image-to-model", 
+                        headers=headers, 
+                        json=payload
+                    )
                     
                     res_json = task_res.json()
                     if task_res.status_code == 200 and res_json.get("code") == 0:
                         task_id = res_json["data"]["task_id"]
-                        st.info(f"Tarea iniciada (ID: {task_id}). Esperando renderizado...")
+                        st.info(f"Tarea iniciada (ID: {task_id}). Renderizando en la nube...")
                         
                         progress_bar = st.progress(0)
                         for i in range(40):
                             time.sleep(5)
-                            status_res = requests.get(f"https://openapi.tripo3d.ai/v3/openapi/task/{task_id}", headers={"Authorization": f"Bearer {api_key}"})
+                            # Consulta de estado usando la ruta v3 de tareas
+                            status_res = requests.get(
+                                f"https://openapi.tripo3d.ai/v3/tasks/{task_id}", 
+                                headers={"Authorization": f"Bearer {api_key}"}
+                            )
                             status_data = status_res.json()
                             
                             if status_data.get("code") == 0:
@@ -82,7 +95,7 @@ if uploaded_file is not None:
                                     st.rerun()
                                     break
                                 elif task_info.get("status") == "failed":
-                                    st.error("La IA indicó que falló la conversión.")
+                                    st.error("La IA indicó que falló la conversión del modelo.")
                                     break
                     else:
                         st.error(f"Error devuelto por Tripo: {res_json}")
