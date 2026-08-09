@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import time
+import base64
 
 st.set_page_config(
     page_title="Generador 3D Real desde Imagen",
@@ -23,51 +24,74 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Configuración de tu API Key gratuita en la barra lateral
 st.sidebar.header("⚙️ Configuración de API")
-st.sidebar.markdown("Consigue tu llave gratis en [Tripo3D](https://www.tripo3d.ai/) o [Meshy](https://www.meshy.ai/)")
-api_key = st.sidebar.text_input("API Key de IA 3D", type="password")
+api_key = st.sidebar.text_input("API Key de Tripo AI", type="password")
 
 st.title("🧊 Generador 3D Real (Imagen a GLB)")
-st.write("Sube tu diseño plano y la IA generará el modelo 3D volumétrico real.")
+st.write("Sube tu diseño y la IA generará el modelo 3D volumétrico real.")
 
-uploaded_file = st.file_uploader("Sube tu imagen (ej. la camiseta)", type=["png", "jpg", "jpeg"])
+uploaded_file = st.file_uploader("Sube tu imagen", type=["png", "jpg", "jpeg"])
 
 if uploaded_file is not None:
     st.image(uploaded_file, caption="Tu imagen de referencia", use_container_width=True)
     
     if st.button("🚀 Generar Modelo 3D Real de mi Imagen"):
         if not api_key:
-            st.error("⚠️ Por favor introduce tu API Key en la barra lateral izquierda para que la IA procese tu imagen.")
+            st.error("⚠️ Por favor introduce tu API Key de Tripo en la barra lateral izquierda.")
         else:
-            with st.spinner("⏳ La IA está analizando tu imagen y esculpiendo el modelo 3D (esto toma unos segundos)..."):
+            with st.spinner("⏳ Subiendo imagen y esperando a que la IA procese el modelo 3D..."):
                 try:
-                    # Ejemplo de integración oficial con la API de Tripo AI (Image-to-3D)
                     headers = {"Authorization": f"Bearer {api_key}"}
+                    
+                    # 1. Subir la imagen a los servidores de Tripo para obtener un token de archivo (task upload)
                     files = {"file": uploaded_file.getvalue()}
+                    upload_res = requests.post("https://openapi.tripo3d.ai/v2/openapi/upload", headers=headers, files=files)
                     
-                    # 1. Enviar la imagen para iniciar la tarea de conversión
-                    response = requests.post(
-                        "https://api.tripo3d.ai/v2/openapi/task",
-                        headers=headers,
-                        json={"type": "image_to_model", "file": {"type": "png", "data": uploaded_file.getvalue().hex()}} # O adaptado al multipart de la API
-                    )
-                    
-                    # Como alternativa universal por pasarela HTTP estándar de archivos:
-                    # (Si usas Tripo/Meshy, asegúrate de colocar tu llave de desarrollador activa)
-                    
-                    # Simulación de respuesta real conectada al flujo de renderizado de la API:
-                    time.sleep(4)
-                    
-                    # Una vez que la API responde con la URL del GLB generado de tu imagen:
-                    # st.session_state['glb_url'] = datos_respuesta['output']['model']
-                    
-                    st.success("¡Modelo 3D generado a partir de tu imagen!")
-                    
+                    if upload_res.status_code == 200 and upload_res.json().get("code") == 0:
+                        file_token = upload_res.json()["data"]["image_token"]
+                        
+                        # 2. Crear la tarea de conversión de Imagen a Modelo 3D
+                        payload = {
+                            "type": "image_to_model",
+                            "file": {"type": "jpg", "file_token": file_token} # Ajustado al estándar de Tripo v2
+                        }
+                        task_res = requests.post("https://openapi.tripo3d.ai/v2/openapi/task", headers=headers, json=payload)
+                        
+                        if task_res.status_code == 200 and task_res.json().get("code") == 0:
+                            task_id = task_res.json()["data"]["task_id"]
+                            st.info(f"Tarea iniciada (ID: {task_id}). Esperando renderizado en la nube...")
+                            
+                            # 3. Consultar periódicamente el estado de la tarea (Polling)
+                            progress_bar = st.progress(0)
+                            for i in range(30):
+                                time.sleep(5)
+                                status_res = requests.get(f"https://openapi.tripo3d.ai/v2/openapi/task/{task_id}", headers=headers)
+                                status_data = status_res.json()
+                                
+                                if status_data.get("code") == 0:
+                                    task_info = status_data["data"]
+                                    progress = task_info.get("progress", 0)
+                                    progress_bar.progress(progress / 100)
+                                    
+                                    if task_info.get("status") == "success":
+                                        # Extraer la URL del archivo .glb resultante
+                                        glb_result_url = task_info["output"]["model"]
+                                        st.session_state['glb_url'] = glb_result_url
+                                        st.success("¡Modelo 3D generado con éxito!")
+                                        st.rerun()
+                                        break
+                                    elif task_info.get("status") == "failed":
+                                        st.error("La IA indicó que falló la generación del modelo.")
+                                        break
+                        else:
+                            st.error(f"Error al crear la tarea: {task_res.text}")
+                    else:
+                        st.error(f"Error al subir la imagen: {upload_res.text}")
+                        
                 except Exception as e:
-                    st.error(f"Error al conectar con el servicio de IA: {e}")
+                    st.error(f"Ocurrió un error de conexión: {e}")
 
-# Visor 3D interáctivo para el modelo real
+# Mostrar visor 3D en cuanto la URL del GLB esté lista
 if 'glb_url' in st.session_state and st.session_state['glb_url']:
     st.markdown("---")
     st.subheader("🔍 Visor 3D de tu Diseño")
@@ -88,7 +112,7 @@ if 'glb_url' in st.session_state and st.session_state['glb_url']:
     </head>
     <body>
         <model-viewer src="{st.session_state['glb_url']}" 
-                      alt="Tu modelo 3D" 
+                      alt="Modelo 3D Generado" 
                       auto-rotate 
                       camera-controls>
         </model-viewer>
@@ -96,3 +120,10 @@ if 'glb_url' in st.session_state and st.session_state['glb_url']:
     </html>
     """
     st.components.v1.html(model_viewer_html, height=470)
+    
+    st.download_button(
+        label="📥 Descargar tu archivo .GLB",
+        data=requests.get(st.session_state['glb_url']).content,
+        file_name="modelo_tripo.glb",
+        mime="model/gltf-binary"
+    )
