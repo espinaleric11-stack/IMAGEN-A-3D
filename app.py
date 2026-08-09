@@ -42,10 +42,10 @@ if uploaded_file is not None:
                 try:
                     headers = {"Authorization": f"Bearer {api_key}"}
                     
-                    # 1. Subir la imagen al servidor de Tripo para obtener el file_token
+                    # 1. Subir la imagen al endpoint correcto de la v3 (/v3/upload)
                     files = {"file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)}
                     upload_res = requests.post(
-                        "https://openapi.tripo3d.ai/v3/openapi/upload", 
+                        "https://openapi.tripo3d.ai/v3/upload", 
                         headers=headers, 
                         files=files
                     )
