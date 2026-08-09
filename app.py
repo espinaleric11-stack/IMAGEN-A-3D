@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import time
+import base64
 
 st.set_page_config(
     page_title="Generador 3D Real desde Imagen",
@@ -38,15 +39,29 @@ if uploaded_file is not None:
         if not api_key:
             st.error("⚠️ Por favor introduce tu API Key de Tripo en la barra lateral izquierda.")
         else:
-            with st.spinner("⏳ Procesando imagen y conectando con la IA de Tripo..."):
+            with st.spinner("⏳ Procesando imagen y conectando con la API v3 de Tripo..."):
                 try:
-                    headers = {"Authorization": f"Bearer {api_key}"}
+                    headers = {
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json"
+                    }
                     
-                    # Enviar la imagen directamente por multipart/form-data al endpoint de tareas actual
-                    files = {"file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)}
-                    data = {"type": "image_to_model"}
+                    # Convertir la imagen a base64 para enviarla en el JSON de la API v3
+                    encoded_image = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
+                    ext = uploaded_file.name.split('.')[-1].lower()
+                    if ext == 'jpg':
+                        ext = 'jpeg'
+                        
+                    payload = {
+                        "type": "image_to_model",
+                        "file": {
+                            "type": ext,
+                            "data": encoded_image
+                        }
+                    }
                     
-                    task_res = requests.post("https://openapi.tripo3d.ai/v2/openapi/task", headers=headers, files=files, data=data)
+                    # Usar el endpoint oficial v3
+                    task_res = requests.post("https://openapi.tripo3d.ai/v3/openapi/task", headers=headers, json=payload)
                     
                     if task_res.status_code == 200 and task_res.json().get("code") == 0:
                         task_id = task_res.json()["data"]["task_id"]
@@ -56,7 +71,7 @@ if uploaded_file is not None:
                         progress_bar = st.progress(0)
                         for i in range(40):
                             time.sleep(5)
-                            status_res = requests.get(f"https://openapi.tripo3d.ai/v2/openapi/task/{task_id}", headers=headers)
+                            status_res = requests.get(f"https://openapi.tripo3d.ai/v3/openapi/task/{task_id}", headers={"Authorization": f"Bearer {api_key}"})
                             status_data = status_res.json()
                             
                             if status_data.get("code") == 0:
