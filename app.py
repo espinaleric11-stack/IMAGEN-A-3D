@@ -46,16 +46,15 @@ if uploaded_file is not None:
                         "Content-Type": "application/json"
                     }
                     
-                    # Convertir la imagen a Base64
                     encoded_image = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
                     ext = uploaded_file.name.split('.')[-1].lower()
                     if ext == 'jpg':
                         ext = 'jpeg'
                         
-                    # Estructura limpia enviando la imagen directamente sin endpoints de subida intermedios
+                    # Estructura con la clave 'file' requerida por la API
                     payload = {
                         "model": "v3.1-20260211",
-                        "image": {
+                        "file": {
                             "type": ext,
                             "data": encoded_image
                         },
