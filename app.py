@@ -43,7 +43,7 @@ with tab1:
             st.warning("Por favor ingresa una descripción.")
         else:
             with st.spinner("✨ La IA está esculpiendo y texturizando tu modelo 3D... (Esto puede tomar unos segundos)"):
-                time.sleep(3) # Simulación de llamada a API de IA (ej: Meshy / Tripo)
+                time.sleep(3) # Simulación de llamada a API de IA
                 st.session_state['glb_url'] = "https://modelviewer.dev/shared-assets/models/Astronaut.glb"
                 st.success("¡Modelo 3D generado con éxito!")
 
@@ -51,7 +51,8 @@ with tab2:
     st.subheader("Generar 3D a partir de una imagen")
     uploaded_file = st.file_uploader("Sube una imagen (PNG, JPG)", type=["png", "jpg", "jpeg"])
     if uploaded_file is not None:
-        st.image(uploaded_file, caption="Imagen de referencia", use_column_width=True)
+        # Corrección aplicada aquí: use_container_width=True
+        st.image(uploaded_file, caption="Imagen de referencia", use_container_width=True)
         if st.button("Generar desde Imagen"):
             with st.spinner("🔄 Analizando la geometría de la imagen y generando malla 3D..."):
                 time.sleep(3)
@@ -96,7 +97,7 @@ if 'glb_url' in st.session_state and st.session_state['glb_url']:
     # Botón de descarga
     st.download_button(
         label="📥 Descargar archivo .GLB",
-        data=b"mock_glb_binary_data", # En producción real aquí cargas los bytes del archivo .glb descargado de la API
+        data=b"mock_glb_binary_data",
         file_name="modelo_3d_ia.glb",
         mime="model/gltf-binary"
     )
