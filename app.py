@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
 import time
-import base64
 
 st.set_page_config(
     page_title="Generador 3D Real desde Imagen",
@@ -39,54 +38,43 @@ if uploaded_file is not None:
         if not api_key:
             st.error("⚠️ Por favor introduce tu API Key de Tripo en la barra lateral izquierda.")
         else:
-            with st.spinner("⏳ Subiendo imagen y esperando a que la IA procese el modelo 3D..."):
+            with st.spinner("⏳ Procesando imagen y conectando con la IA de Tripo..."):
                 try:
                     headers = {"Authorization": f"Bearer {api_key}"}
                     
-                    # 1. Subir la imagen a los servidores de Tripo para obtener un token de archivo (task upload)
-                    files = {"file": uploaded_file.getvalue()}
-                    upload_res = requests.post("https://openapi.tripo3d.ai/v2/openapi/upload", headers=headers, files=files)
+                    # Enviar la imagen directamente por multipart/form-data al endpoint de tareas actual
+                    files = {"file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)}
+                    data = {"type": "image_to_model"}
                     
-                    if upload_res.status_code == 200 and upload_res.json().get("code") == 0:
-                        file_token = upload_res.json()["data"]["image_token"]
+                    task_res = requests.post("https://openapi.tripo3d.ai/v2/openapi/task", headers=headers, files=files, data=data)
+                    
+                    if task_res.status_code == 200 and task_res.json().get("code") == 0:
+                        task_id = task_res.json()["data"]["task_id"]
+                        st.info(f"Tarea creada con éxito (ID: {task_id}). Renderizando en la nube...")
                         
-                        # 2. Crear la tarea de conversión de Imagen a Modelo 3D
-                        payload = {
-                            "type": "image_to_model",
-                            "file": {"type": "jpg", "file_token": file_token} # Ajustado al estándar de Tripo v2
-                        }
-                        task_res = requests.post("https://openapi.tripo3d.ai/v2/openapi/task", headers=headers, json=payload)
-                        
-                        if task_res.status_code == 200 and task_res.json().get("code") == 0:
-                            task_id = task_res.json()["data"]["task_id"]
-                            st.info(f"Tarea iniciada (ID: {task_id}). Esperando renderizado en la nube...")
+                        # Monitorear el progreso de la tarea (Polling)
+                        progress_bar = st.progress(0)
+                        for i in range(40):
+                            time.sleep(5)
+                            status_res = requests.get(f"https://openapi.tripo3d.ai/v2/openapi/task/{task_id}", headers=headers)
+                            status_data = status_res.json()
                             
-                            # 3. Consultar periódicamente el estado de la tarea (Polling)
-                            progress_bar = st.progress(0)
-                            for i in range(30):
-                                time.sleep(5)
-                                status_res = requests.get(f"https://openapi.tripo3d.ai/v2/openapi/task/{task_id}", headers=headers)
-                                status_data = status_res.json()
+                            if status_data.get("code") == 0:
+                                task_info = status_data["data"]
+                                progress = task_info.get("progress", 0)
+                                progress_bar.progress(progress / 100)
                                 
-                                if status_data.get("code") == 0:
-                                    task_info = status_data["data"]
-                                    progress = task_info.get("progress", 0)
-                                    progress_bar.progress(progress / 100)
-                                    
-                                    if task_info.get("status") == "success":
-                                        # Extraer la URL del archivo .glb resultante
-                                        glb_result_url = task_info["output"]["model"]
-                                        st.session_state['glb_url'] = glb_result_url
-                                        st.success("¡Modelo 3D generado con éxito!")
-                                        st.rerun()
-                                        break
-                                    elif task_info.get("status") == "failed":
-                                        st.error("La IA indicó que falló la generación del modelo.")
-                                        break
-                        else:
-                            st.error(f"Error al crear la tarea: {task_res.text}")
+                                if task_info.get("status") == "success":
+                                    glb_result_url = task_info["output"]["model"]
+                                    st.session_state['glb_url'] = glb_result_url
+                                    st.success("¡Modelo 3D generado con éxito!")
+                                    st.rerun()
+                                    break
+                                elif task_info.get("status") == "failed":
+                                    st.error("La IA indicó que falló la conversión del modelo.")
+                                    break
                     else:
-                        st.error(f"Error al subir la imagen: {upload_res.text}")
+                        st.error(f"Error de la API: {task_res.text}")
                         
                 except Exception as e:
                     st.error(f"Ocurrió un error de conexión: {e}")
