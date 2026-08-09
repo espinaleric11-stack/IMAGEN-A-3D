@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
 import time
-import base64
 
 st.set_page_config(
     page_title="Generador 3D Real desde Imagen",
@@ -39,33 +38,27 @@ if uploaded_file is not None:
         if not api_key:
             st.error("⚠️ Por favor introduce tu API Key de Tripo en la barra lateral izquierda.")
         else:
-            with st.spinner("⏳ Procesando imagen y esculpiendo el modelo 3D con Tripo..."):
+            with st.spinner("⏳ Enviando archivo y esculpiendo el modelo 3D con Tripo..."):
                 try:
                     headers = {
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json"
+                        "Authorization": f"Bearer {api_key}"
                     }
                     
-                    encoded_image = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
-                    ext = uploaded_file.name.split('.')[-1].lower()
-                    if ext == 'jpg':
-                        ext = 'jpeg'
-                        
-                    # Estructura con la clave 'file' requerida por la API
-                    payload = {
+                    # Petición multipart enviando la imagen y los parámetros requeridos de forma nativa
+                    files = {
+                        "file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)
+                    }
+                    data = {
                         "model": "v3.1-20260211",
-                        "file": {
-                            "type": ext,
-                            "data": encoded_image
-                        },
-                        "texture": True,
-                        "pbr": True
+                        "texture": "true",
+                        "pbr": "true"
                     }
                     
                     task_res = requests.post(
                         "https://openapi.tripo3d.ai/v3/generation/image-to-model", 
                         headers=headers, 
-                        json=payload
+                        files=files,
+                        data=data
                     )
                     
                     res_json = task_res.json()
@@ -121,7 +114,7 @@ if 'glb_url' in st.session_state and st.session_state['glb_url']:
         </style>
     </head>
     <body>
-        <model-viewer src="{st.session_state['glb_url']}" 
+        model-viewer src="{st.session_state['glb_url']}" 
                       alt="Modelo 3D Generado" 
                       auto-rotate 
                       camera-controls>
