@@ -23,6 +23,10 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# Configuración de API Key en la barra lateral
+st.sidebar.header("⚙️ Configuración")
+api_key_input = st.sidebar.text_input("Ingresa tu API Key (ej. Meshy)", type="password")
+
 st.title("🧊 Generador de Modelos 3D con IA (GLB)")
 st.write("Transforma texto o imágenes en modelos 3D interactivos listos para exportar en formato `.glb`.")
 
@@ -36,7 +40,6 @@ with tab1:
             st.warning("Escribe una descripción.")
         else:
             with st.spinner("✨ Generando modelo 3D desde texto..."):
-                # TODO: Reemplazar con llamada real a API de Text-to-3D
                 time.sleep(2)
                 st.session_state['glb_url'] = "https://modelviewer.dev/shared-assets/models/Astronaut.glb"
                 st.success("¡Modelo generado!")
@@ -49,32 +52,47 @@ with tab2:
         st.image(uploaded_file, caption="Imagen de referencia (Tu diseño)", use_container_width=True)
         
         if st.button("Generar 3D desde esta Imagen"):
-            with st.spinner("🔄 Procesando tu imagen con IA para convertirla en 3D..."):
-                
-                # --- INTEGRACIÓN CON API REAL (EJEMPLO CONECTANDO TU IMAGEN) ---
-                API_KEY = "TU_API_KEY_AQUI" # Pon aquí tu llave de Meshy, Tripo, etc.
-                
-                if API_KEY == "TU_API_KEY_AQUI":
-                    # Modo simulación avanzada si aún no pones la API key
-                    time.sleep(3)
-                    st.warning("⚠️ Estás usando modo simulación. Configura tu API Key para procesar la imagen real de la camiseta.")
-                    st.session_state['glb_url'] = "https://modelviewer.dev/shared-assets/models/Astronaut.glb"
-                else:
+            if not api_key_input:
+                st.error("⚠️ Por favor ingresa tu API Key en la barra lateral izquierda para procesar tu imagen real.")
+            else:
+                with st.spinner("🔄 Enviando tu imagen a la IA para esculpir el modelo 3D..."):
                     try:
-                        # Ejemplo conceptual de envío de imagen por archivo binario a una API de 3D
+                        # Ejemplo de integración con la API de Meshy (Image to 3D)
+                        headers = {"Authorization": f"Bearer {api_key_input}"}
+                        
+                        # 1. Subir/enviar la imagen para crear la tarea de generación 3D
                         files = {"image_file": uploaded_file.getvalue()}
-                        headers = {"Authorization": f"Bearer {API_KEY}"}
+                        data = {"ai_model": "meshy-4"} # O el modelo correspondiente
                         
-                        # Realiza la petición POST a la API de tu proveedor 3D elegido
-                        # response = requests.post("https://api.tu-proveedor-3d.com/v1/image-to-3d", headers=headers, files=files)
-                        # data = response.json()
-                        # st.session_state['glb_url'] = data['result_glb_url']
+                        response = requests.post("https://api.meshy.ai/v1/image-to-3d", headers=headers, files=files, data=data)
                         
-                        st.success("¡Modelo 3D de tu imagen generado con éxito!")
+                        if response.status_code == 200:
+                            task_id = response.json().get("result")
+                            st.info(f"Tarea creada (ID: {task_id}). Esperando procesamiento de la IA...")
+                            
+                            # Bucle de verificación de estado (Polling)
+                            progress_bar = st.progress(0)
+                            for i in range(30):
+                                time.sleep(5)
+                                status_res = requests.get(f"https://api.meshy.ai/v1/image-to-3d/{task_id}", headers=headers)
+                                status_data = status_res.json()
+                                
+                                status = status_data.get("status")
+                                if status == "SUCCEEDED":
+                                    st.session_state['glb_url'] = status_data.get("model_urls").get("glb")
+                                    st.success("¡Modelo 3D de tu imagen generado con éxito!")
+                                    break
+                                elif status == "FAILED":
+                                    st.error("La generación falló en el servidor de IA.")
+                                    break
+                                progress_bar.progress((i + 1) / 30)
+                        else:
+                            st.error(f"Error en la API: {response.text}")
+                            
                     except Exception as e:
-                        st.error(f"Error al conectar con la API: {e}")
+                        st.error(f"Ocurrió un error de conexión: {e}")
 
-# Mostrar visor 3D dinámico
+# Mostrar visor 3D dinámico si la URL del GLB está lista
 if 'glb_url' in st.session_state and st.session_state['glb_url']:
     st.markdown("---")
     st.subheader("🔍 Visor Interactivo 3D de tu Modelo")
