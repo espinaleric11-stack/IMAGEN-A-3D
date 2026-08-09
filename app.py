@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import time
+import base64
 
 st.set_page_config(
     page_title="Generador 3D Real desde Imagen",
@@ -38,70 +39,66 @@ if uploaded_file is not None:
         if not api_key:
             st.error("⚠️ Por favor introduce tu API Key de Tripo en la barra lateral izquierda.")
         else:
-            with st.spinner("⏳ Subiendo imagen y esculpiendo el modelo 3D con Tripo..."):
+            with st.spinner("⏳ Procesando imagen y esculpiendo el modelo 3D con Tripo..."):
                 try:
-                    headers = {"Authorization": f"Bearer {api_key}"}
+                    headers = {
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json"
+                    }
                     
-                    # 1. Subir la imagen al endpoint correcto de la v3 (/v3/upload)
-                    files = {"file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)}
-                    upload_res = requests.post(
-                        "https://openapi.tripo3d.ai/v3/upload", 
+                    # Convertir la imagen a Base64
+                    encoded_image = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
+                    ext = uploaded_file.name.split('.')[-1].lower()
+                    if ext == 'jpg':
+                        ext = 'jpeg'
+                        
+                    # Estructura limpia enviando la imagen directamente sin endpoints de subida intermedios
+                    payload = {
+                        "model": "v3.1-20260211",
+                        "image": {
+                            "type": ext,
+                            "data": encoded_image
+                        },
+                        "texture": True,
+                        "pbr": True
+                    }
+                    
+                    task_res = requests.post(
+                        "https://openapi.tripo3d.ai/v3/generation/image-to-model", 
                         headers=headers, 
-                        files=files
+                        json=payload
                     )
                     
-                    upload_json = upload_res.json()
-                    if upload_res.status_code == 200 and upload_json.get("code") == 0:
-                        file_token = upload_json["data"]["file_token"]
+                    res_json = task_res.json()
+                    if task_res.status_code == 200 and res_json.get("code") == 0:
+                        task_id = res_json["data"]["task_id"]
+                        st.info(f"Tarea iniciada (ID: {task_id}). Renderizando en la nube...")
                         
-                        # 2. Enviar la tarea de generación usando el file_token obtenido
-                        payload = {
-                            "model": "v3.1-20260211",
-                            "file": {
-                                "file_token": file_token
-                            },
-                            "texture": True,
-                            "pbr": True
-                        }
-                        
-                        task_res = requests.post(
-                            "https://openapi.tripo3d.ai/v3/generation/image-to-model", 
-                            headers={**headers, "Content-Type": "application/json"}, 
-                            json=payload
-                        )
-                        
-                        res_json = task_res.json()
-                        if task_res.status_code == 200 and res_json.get("code") == 0:
-                            task_id = res_json["data"]["task_id"]
-                            st.info(f"Tarea iniciada (ID: {task_id}). Renderizando en la nube...")
+                        progress_bar = st.progress(0)
+                        for i in range(40):
+                            time.sleep(5)
+                            status_res = requests.get(
+                                f"https://openapi.tripo3d.ai/v3/tasks/{task_id}", 
+                                headers={"Authorization": f"Bearer {api_key}"}
+                            )
+                            status_data = status_res.json()
                             
-                            progress_bar = st.progress(0)
-                            for i in range(40):
-                                time.sleep(5)
-                                status_res = requests.get(
-                                    f"https://openapi.tripo3d.ai/v3/tasks/{task_id}", 
-                                    headers=headers
-                                )
-                                status_data = status_res.json()
+                            if status_data.get("code") == 0:
+                                task_info = status_data["data"]
+                                progress = task_info.get("progress", 0)
+                                progress_bar.progress(progress / 100)
                                 
-                                if status_data.get("code") == 0:
-                                    task_info = status_data["data"]
-                                    progress = task_info.get("progress", 0)
-                                    progress_bar.progress(progress / 100)
-                                    
-                                    if task_info.get("status") == "success":
-                                        glb_result_url = task_info["output"]["model"]
-                                        st.session_state['glb_url'] = glb_result_url
-                                        st.success("¡Modelo 3D generado con éxito!")
-                                        st.rerun()
-                                        break
-                                    elif task_info.get("status") == "failed":
-                                        st.error("La IA indicó que falló la conversión del modelo.")
-                                        break
-                        else:
-                            st.error(f"Error al iniciar la tarea 3D: {res_json}")
+                                if task_info.get("status") == "success":
+                                    glb_result_url = task_info["output"]["model"]
+                                    st.session_state['glb_url'] = glb_result_url
+                                    st.success("¡Modelo 3D generado con éxito!")
+                                    st.rerun()
+                                    break
+                                elif task_info.get("status") == "failed":
+                                    st.error("La IA indicó que falló la conversión del modelo.")
+                                    break
                     else:
-                        st.error(f"Error al subir la imagen: {upload_json}")
+                        st.error(f"Error devuelto por Tripo: {res_json}")
                         
                 except Exception as e:
                     st.error(f"Ocurrió un error de conexión: {e}")
