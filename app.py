@@ -51,8 +51,9 @@ if uploaded_file is not None:
                     if ext == 'jpg':
                         ext = 'jpeg'
                         
-                    # Estructura oficial v3 para Image-to-Model
+                    # Estructura oficial v3 con el parámetro 'model' requerido
                     payload = {
+                        "model": "v3.1-20260211",
                         "file": {
                             "type": ext,
                             "data": encoded_image
@@ -61,7 +62,6 @@ if uploaded_file is not None:
                         "pbr": True
                     }
                     
-                    # Endpoint oficial correcto de Tripo v3
                     task_res = requests.post(
                         "https://openapi.tripo3d.ai/v3/generation/image-to-model", 
                         headers=headers, 
@@ -76,7 +76,6 @@ if uploaded_file is not None:
                         progress_bar = st.progress(0)
                         for i in range(40):
                             time.sleep(5)
-                            # Consulta de estado usando la ruta v3 de tareas
                             status_res = requests.get(
                                 f"https://openapi.tripo3d.ai/v3/tasks/{task_id}", 
                                 headers={"Authorization": f"Bearer {api_key}"}
