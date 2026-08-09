@@ -39,35 +39,31 @@ if uploaded_file is not None:
         if not api_key:
             st.error("⚠️ Por favor introduce tu API Key de Tripo en la barra lateral izquierda.")
         else:
-            with st.spinner("⏳ Procesando imagen y conectando con la API v3 de Tripo..."):
+            with st.spinner("⏳ Conectando con la API de Tripo para esculpir el modelo 3D..."):
                 try:
                     headers = {
                         "Authorization": f"Bearer {api_key}",
                         "Content-Type": "application/json"
                     }
                     
-                    # Convertir la imagen a base64 para enviarla en el JSON de la API v3
                     encoded_image = base64.b64encode(uploaded_file.getvalue()).decode('utf-8')
-                    ext = uploaded_file.name.split('.')[-1].lower()
-                    if ext == 'jpg':
-                        ext = 'jpeg'
-                        
+                    
                     payload = {
                         "type": "image_to_model",
                         "file": {
-                            "type": ext,
+                            "type": "jpg",
                             "data": encoded_image
                         }
                     }
                     
-                    # Usar el endpoint oficial v3
+                    # Endpoint corregido para la API v3 de Tripo
                     task_res = requests.post("https://openapi.tripo3d.ai/v3/openapi/task", headers=headers, json=payload)
                     
-                    if task_res.status_code == 200 and task_res.json().get("code") == 0:
-                        task_id = task_res.json()["data"]["task_id"]
-                        st.info(f"Tarea creada con éxito (ID: {task_id}). Renderizando en la nube...")
+                    res_json = task_res.json()
+                    if task_res.status_code == 200 and res_json.get("code") == 0:
+                        task_id = res_json["data"]["task_id"]
+                        st.info(f"Tarea iniciada (ID: {task_id}). Esperando renderizado...")
                         
-                        # Monitorear el progreso de la tarea (Polling)
                         progress_bar = st.progress(0)
                         for i in range(40):
                             time.sleep(5)
@@ -86,15 +82,14 @@ if uploaded_file is not None:
                                     st.rerun()
                                     break
                                 elif task_info.get("status") == "failed":
-                                    st.error("La IA indicó que falló la conversión del modelo.")
+                                    st.error("La IA indicó que falló la conversión.")
                                     break
                     else:
-                        st.error(f"Error de la API: {task_res.text}")
+                        st.error(f"Error devuelto por Tripo: {res_json}")
                         
                 except Exception as e:
                     st.error(f"Ocurrió un error de conexión: {e}")
 
-# Mostrar visor 3D en cuanto la URL del GLB esté lista
 if 'glb_url' in st.session_state and st.session_state['glb_url']:
     st.markdown("---")
     st.subheader("🔍 Visor 3D de tu Diseño")
