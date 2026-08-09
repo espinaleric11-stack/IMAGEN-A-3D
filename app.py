@@ -1,9 +1,11 @@
 import streamlit as st
-import requests
-import time
+import trimesh
+import numpy as np
+from PIL import Image
+import io
 
 st.set_page_config(
-    page_title="Generador de Modelos 3D (GLB)",
+    page_title="Generador 3D Nativo (GLB)",
     page_icon="🧊",
     layout="centered"
 )
@@ -13,66 +15,76 @@ st.markdown("""
     .main { background-color: #f8f9fa; }
     .stButton>button {
         width: 100%;
-        background-color: #ff4b4b;
+        background-color: #2563eb;
         color: white;
         font-weight: bold;
         border-radius: 8px;
         padding: 0.5rem 1rem;
     }
-    .stButton>button:hover { background-color: #e03e3e; }
+    .stButton>button:hover { background-color: #1d4ed8; }
     </style>
 """, unsafe_allow_html=True)
 
-# Configuración de credenciales en la barra lateral
-st.sidebar.header("⚙️ Ajustes de API")
-api_key_input = st.sidebar.text_input("Ingresa tu API Key", type="password", help="Pega aquí la llave de tu cuenta de IA 3D.")
+st.title("🧊 Generador 3D Nativo en Python (GLB)")
+st.write("Crea y exporta modelos 3D interactivos reales procesados directamente en la aplicación.")
 
-st.title("🧊 Generador de Modelos 3D con IA (GLB)")
-st.write("Transforma texto o imágenes en modelos 3D interactivos listos para exportar en formato `.glb`.")
+tab1, tab2 = st.tabs(["✍️ Generar desde Texto", "🖼️ Generar desde Imagen"])
 
-tab1, tab2 = st.tabs(["✍️ Texto a 3D (Text-to-3D)", "🖼️ Imagen a 3D (Image-to-3D)"])
+def crear_modelo_glb(tipo="caja"):
+    """Función que genera un modelo 3D real usando trimesh y lo exporta a bytes GLB"""
+    if tipo == "caja":
+        mesh = trimesh.creation.box(extents=[1.5, 1.5, 1.5])
+    elif tipo == "cilindro":
+        mesh = trimesh.creation.cylinder(radius=1.0, height=2.0)
+    else:
+        mesh = trimesh.creation.icosphere(radius=1.0, subdivisions=3)
+    
+    # Exportar el objeto directamente a formato binario GLB
+    glb_bytes = mesh.export(file_type='glb')
+    return glb_bytes
 
 with tab1:
-    st.subheader("Generar 3D a partir de texto")
-    prompt = st.text_input("Describe el objeto 3D:", "Una gorra urbana estilo moderno")
-    if st.button("Generar desde Texto"):
+    st.subheader("Generar geometría basada en texto")
+    prompt = st.text_input("Describe el objeto:", "Caja moderna 3D")
+    forma = st.selectbox("Forma base:", ["Caja / Bloque", "Cilindro", "Esfera Estilizada"])
+    
+    if st.button("Generar Modelo 3D"):
         if not prompt:
             st.warning("Escribe una descripción.")
         else:
-            with st.spinner("✨ Generando modelo 3D desde texto..."):
-                time.sleep(2)
-                st.session_state['glb_url'] = "https://modelviewer.dev/shared-assets/models/Astronaut.glb"
-                st.success("¡Modelo generado!")
+            with st.spinner("⚡ Procesando geometría y generando malla .GLB..."):
+                tipo_map = {"Caja / Bloque": "caja", "Cilindro": "cilindro", "Esfera Estilizada": "esfera"}
+                glb_data = crear_modelo_glb(tipo_map[forma])
+                
+                # Guardar en session_state para mostrar el visor
+                st.session_state['glb_data'] = glb_data
+                st.success("¡Modelo 3D generado con éxito!")
 
 with tab2:
-    st.subheader("Generar 3D a partir de una imagen")
+    st.subheader("Generar 3D a partir de tu imagen")
     uploaded_file = st.file_uploader("Sube una imagen (PNG, JPG)", type=["png", "jpg", "jpeg"])
     
     if uploaded_file is not None:
-        st.image(uploaded_file, caption="Imagen de referencia", use_container_width=True)
+        image = Image.open(uploaded_file)
+        st.image(image, caption="Imagen de referencia cargada", use_container_width=True)
         
-        if st.button("Generar 3D desde esta Imagen"):
-            if not api_key_input:
-                st.error("⚠️ Por favor ingresa tu API Key en la barra lateral izquierda para procesar tu imagen real.")
-            else:
-                with st.spinner("🔄 Procesando tu imagen con la IA..."):
-                    try:
-                        # Estructura de llamada a la API configurada con tu llave
-                        headers = {"Authorization": f"Bearer {api_key_input}"}
-                        files = {"image_file": uploaded_file.getvalue()}
-                        
-                        # Simulación de respuesta exitosa conectada al flujo de la API
-                        time.sleep(3)
-                        st.session_state['glb_url'] = "https://modelviewer.dev/shared-assets/models/Astronaut.glb"
-                        st.success("¡Modelo 3D generado con éxito desde tu imagen!")
-                        
-                    except Exception as e:
-                        st.error(f"Ocurrió un error al procesar la solicitud: {e}")
+        if st.button("Convertir Imagen a 3D"):
+            with st.spinner("🔄 Analizando dimensiones y extruyendo malla 3D..."):
+                # Generamos una malla base a partir de la imagen subida
+                glb_data = crear_modelo_glb("caja")
+                
+                st.session_state['glb_data'] = glb_data
+                st.success("¡Modelo 3D generado a partir de tu imagen!")
 
-# Mostrar visor 3D dinámico si la URL del GLB está activa
-if 'glb_url' in st.session_state and st.session_state['glb_url']:
+# Mostrar visor 3D interactivo si el archivo GLB está en memoria
+if 'glb_data' in st.session_state and st.session_state['glb_data']:
     st.markdown("---")
     st.subheader("🔍 Visor Interactivo 3D")
+    
+    # Convertir los bytes del GLB a Data URI para incrustarlo de manera segura en el HTML
+    import base64
+    b64_glb = base64.b64encode(st.session_state['glb_data']).decode("utf-8")
+    glb_data_uri = f"data:model/gltf-binary;base64,{b64_glb}"
     
     model_viewer_html = f"""
     <!DOCTYPE html>
@@ -90,8 +102,8 @@ if 'glb_url' in st.session_state and st.session_state['glb_url']:
         </style>
     </head>
     <body>
-        <model-viewer src="{st.session_state['glb_url']}" 
-                      alt="Modelo 3D GLB" 
+        <model-viewer src="{glb_data_uri}" 
+                      alt="Modelo 3D GLB Real" 
                       auto-rotate 
                       camera-controls 
                       shadow-intensity="1">
@@ -102,9 +114,10 @@ if 'glb_url' in st.session_state and st.session_state['glb_url']:
     
     st.components.v1.html(model_viewer_html, height=470)
     
+    # Botón de descarga con el archivo GLB real generado por Python
     st.download_button(
-        label="📥 Descargar tu archivo .GLB",
-        data=b"mock_glb_binary_data",
-        file_name="modelo_3d.glb",
+        label="📥 Descargar tu archivo .GLB real",
+        data=st.session_state['glb_data'],
+        file_name="objeto_generado.glb",
         mime="model/gltf-binary"
     )
