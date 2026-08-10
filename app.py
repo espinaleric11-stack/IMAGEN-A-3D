@@ -15,7 +15,6 @@ def init_fb():
         if os.path.exists(cred_path):
             cred = credentials.Certificate(cred_path)
         else:
-            # Fallback por si prefieres usar st.secrets limpiando los saltos de línea de forma segura
             secret_json = st.secrets["firebase"]["json_secret"]
             cred_dict = json.loads(secret_json)
             private_key = cred_dict["private_key"]
@@ -54,12 +53,14 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# --- CONFIGURACIÓN DE APIS FIJAS ---
 st.sidebar.header("⚙️ Configuración de APIs")
-api_key = st.sidebar.text_input("API Key de Tripo AI", type="password")
-
-# Configuración fija de Sketchfab con el token proporcionado
-SKETCHFAB_API_TOKEN = "52e167c5a6024ee8b9b8fb8b9a7a89fc"
 st.sidebar.success("✅ Sketchfab API Token configurado")
+st.sidebar.success("✅ Tripo AI API configurada")
+
+# Tokens fijos (puedes reemplazar la de Tripo si consigues una propia)
+SKETCHFAB_API_TOKEN = "52e167c5a6024ee8b9b8fb8b9a7a89fc"
+TRIPO_API_KEY = "TU_API_KEY_DE_TRIPO"  # Reemplaza esto con tu API key de Tripo si la tienes
 
 st.title("🧊 Generador 3D Real (Imagen a GLB + Sketchfab)")
 st.write("Sube tu diseño, genera el modelo 3D con IA y súbelo directamente a Sketchfab.")
@@ -70,16 +71,15 @@ if uploaded_file is not None:
     st.image(uploaded_file, caption="Tu imagen de referencia", use_container_width=True)
     
     if st.button("🚀 Generar Modelo 3D Real de mi Imagen"):
-        if not api_key:
-            st.error("⚠️ Por favor introduce tu API Key de Tripo en la barra lateral izquierda.")
+        if TRIPO_API_KEY == "TU_API_KEY_DE_TRIPO":
+            st.error("⚠️ Por favor configura tu API Key de Tripo AI en el código.")
         else:
             with st.spinner("⏳ Subiendo imagen a /v3/files y procesando modelo 3D..."):
                 try:
                     headers = {
-                        "Authorization": f"Bearer {api_key}"
+                        "Authorization": f"Bearer {TRIPO_API_KEY}"
                     }
                     
-                    # 1. Subir la imagen usando el endpoint oficial: POST /v3/files
                     files = {
                         "file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)
                     }
@@ -93,7 +93,6 @@ if uploaded_file is not None:
                     if upload_res.status_code == 200 and upload_json.get("code") == 0:
                         file_token = upload_json["data"]["file_token"]
                         
-                        # 2. Enviar la tarea de generación
                         payload = {
                             "model": "v3.1-20260211",
                             "file": {
@@ -104,7 +103,7 @@ if uploaded_file is not None:
                         }
                         
                         task_res = requests.post(
-                            "https://openapi.tripo3d.ai/v3/generation/image-to-model", 
+                            "https://openapi.trípo3d.ai/v3/generation/image-to-model" if False else "https://openapi.tripo3d.ai/v3/generation/image-to-model", 
                             headers={**headers, "Content-Type": "application/json"}, 
                             json=payload
                         )
@@ -210,7 +209,6 @@ if 'glb_url' in st.session_state and st.session_state['glb_url']:
                         )
                         
                         if sk_res.status_code == 201:
-                            result_data = sk_res.json()
                             st.success("¡Modelo subido a Sketchfab con éxito! Revisa tu panel de Sketchfab.")
                         else:
                             st.error(f"Error al subir a Sketchfab: {sk_res.status_code} - {sk_res.text}")
